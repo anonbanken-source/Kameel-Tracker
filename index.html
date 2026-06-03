@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>VeeTracker</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  :root {
+    --bg: #f5f0e8;
+    --surface: #ffffff;
+    --surface2: #ede8dc;
+    --border: #ddd8cc;
+    --accent: #147EFB;
+    --amber: #f5a623;
+    --red: #c0392b;
+    --text: #1a1a1a;
+    --text-muted: #999990;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, 'Helvetica Neue', sans-serif;
+    overflow: hidden;
+  }
+
+  .app {
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-bar {
+    background: #c0392b;
+    border-bottom: none;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+
+  .app-title { font-size: 15px; font-weight: 700; color: white; letter-spacing: 1.5px; text-transform: uppercase; }
+
+  .live-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(255,255,255,0.18);
+    border: 1px solid rgba(255,255,255,0.35);
+    border-radius: 20px; padding: 4px 10px;
+    font-size: 11px; font-weight: 600; color: white;
+  }
+
+  .live-dot {
+    width: 6px; height: 6px; background: white;
+    border-radius: 50%; animation: pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(0.8); }
+  }
+
+  .screen { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
+  .tab-content { display: none; flex: 1; flex-direction: column; overflow: hidden; }
+  .tab-content.active { display: flex; }
+
+  /* MAP */
+  .map-wrapper { flex: 1; position: relative; overflow: hidden; }
+
+  #map { width: 100%; height: 100%; }
+
+  .leaflet-tile-pane { filter: saturate(0.45) brightness(1.05) sepia(0.3); }
+
+  .map-coords-badge {
+    position: absolute; bottom: 12px; left: 12px;
+    background: rgba(255,255,255,0.88);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 10px;
+    font-size: 11px; color: var(--text-muted);
+    z-index: 500; backdrop-filter: blur(6px);
+    pointer-events: none;
+  }
+
+  .leaflet-control-zoom {
+    border: 1px solid var(--border) !important;
+    border-radius: 8px !important;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12) !important;
+  }
+  .leaflet-control-zoom a {
+    background: rgba(255,255,255,0.95) !important;
+    color: #333 !important;
+    border-bottom: 1px solid var(--border) !important;
+    width: 32px !important; height: 32px !important;
+    line-height: 32px !important;
+    font-size: 16px !important; font-weight: 400 !important;
+  }
+  .leaflet-control-zoom a:hover { background: var(--surface2) !important; }
+  .leaflet-control-zoom-out { border-bottom: none !important; }
+
+  /* ANIMAL CARD */
+  .animal-card {
+    background: var(--surface); border-top: 1px solid var(--border);
+    padding: 14px 20px; flex-shrink: 0;
+    display: flex; align-items: center; gap: 14px;
+  }
+  .animal-avatar {
+    width: 46px; height: 46px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 22px; flex-shrink: 0;
+  }
+  .animal-info { flex: 1; min-width: 0; }
+  .animal-name { font-size: 15px; font-weight: 700; color: var(--text); letter-spacing: -0.2px; }
+  .animal-sub { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+  .animal-status {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 11px; font-weight: 500; color: var(--accent); margin-top: 5px;
+  }
+  .status-dot {
+    width: 6px; height: 6px; background: var(--accent);
+    border-radius: 50%; animation: pulse 1.6s ease-in-out infinite;
+  }
+  .animal-meta { text-align: right; flex-shrink: 0; }
+  .bat-pct { font-size: 13px; font-weight: 600; color: var(--accent); }
+  .last-seen { font-size: 10px; color: var(--text-muted); margin-top: 3px; }
+
+  /* DETAIL TAB */
+  .detail-scroll { flex: 1; overflow-y: auto; padding-bottom: 12px; }
+  .detail-scroll::-webkit-scrollbar { width: 0; }
+
+  .detail-hero {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: 20px; display: flex; align-items: center; gap: 16px;
+  }
+  .hero-avatar {
+    width: 56px; height: 56px; background: var(--surface2);
+    border: 1px solid var(--border); border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+  }
+  .hero-name { font-size: 20px; font-weight: 700; color: var(--text); letter-spacing: -0.4px; }
+  .hero-id { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+  .hero-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; color: var(--accent); margin-top: 6px;
+  }
+
+  .section-label {
+    font-size: 11px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.8px; padding: 18px 20px 8px;
+  }
+
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 0 16px; }
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .stat-label { font-size: 11px; font-weight: 500; color: var(--text-muted); margin-bottom: 6px; }
+  .stat-value { font-size: 22px; font-weight: 700; color: var(--text); letter-spacing: -0.5px; }
+  .stat-unit { font-size: 12px; font-weight: 400; color: var(--text-muted); margin-left: 2px; }
+  .stat-value.green { color: var(--accent); }
+  .stat-value.amber { color: var(--amber); }
+
+  .info-group {
+    margin: 0 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+  }
+  .info-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 16px; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .info-row:last-child { border-bottom: none; }
+  .info-key { color: var(--text-muted); font-weight: 500; font-size: 13px; }
+  .info-val { color: var(--text); font-weight: 500; }
+  .info-val.green { color: var(--accent); }
+  .info-val.amber { color: var(--amber); }
+
+  .batt-section {
+    margin: 0 16px; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 12px; padding: 14px 16px;
+  }
+  .batt-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 13px; }
+  .batt-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+  .batt-fill { height: 100%; width: 74%; background: var(--accent); border-radius: 3px; }
+  .batt-sub { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
+
+  .alert-card {
+    margin: 0 16px; background: rgba(245,166,35,0.07);
+    border: 1px solid rgba(245,166,35,0.2); border-radius: 12px; padding: 14px 16px;
+  }
+  .alert-title { font-size: 12px; font-weight: 600; color: var(--amber); margin-bottom: 6px; }
+  .alert-body { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+
+  .bottom-nav {
+    background: var(--surface); border-top: 1px solid var(--border);
+    display: flex; flex-shrink: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .nav-btn {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 4px; padding: 10px 0 12px;
+    cursor: pointer; background: none; border: none;
+    color: #aaa; position: relative;
+  }
+  .nav-btn.active { color: var(--red); }
+  .nav-btn.active::before {
+    content: ''; position: absolute;
+    top: 0; left: 25%; right: 25%;
+    height: 2px; background: var(--red); border-radius: 0 0 2px 2px;
+  }
+  .nav-icon { font-size: 21px; line-height: 1; }
+  .nav-label { font-size: 10px; font-weight: 500; }
+  .nav-btn.disabled { opacity: 0.3; pointer-events: none; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="app-bar">
+    <div class="app-title">VeeTrack</div>
+    <div class="live-chip"><div class="live-dot"></div>Live</div>
+  </div>
+
+  <div class="screen">
+
+    <!-- TAB: KAART -->
+    <div class="tab-content active" id="tab-kaart">
+      <div class="map-wrapper">
+        <div id="map"></div>
+        <div class="map-coords-badge">52.3312°N · 6.6748°E</div>
+      </div>
+
+      <div class="animal-card">
+        <div class="animal-avatar">🐪</div>
+        <div class="animal-info">
+          <div class="animal-name">Kameel 1</div>
+          <div class="animal-sub">TAG: VT-2024-KML-007 · Dromedar</div>
+          <div class="animal-status">
+            <div class="status-dot"></div>
+            Online · Schuur gedetecteerd
+          </div>
+        </div>
+        <div class="animal-meta">
+          <div class="bat-pct">74%</div>
+          <div class="last-seen">~18 dagen</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DETAIL -->
+    <div class="tab-content" id="tab-detail">
+      <div class="detail-scroll">
+
+        <div class="detail-hero">
+          <div class="hero-avatar">🐪</div>
+          <div>
+            <div class="hero-name">Kameel 1</div>
+            <div class="hero-id">TAG: VT-2024-KML-007 · Dromedar</div>
+            <div class="hero-status">
+              <div class="status-dot"></div>
+              Online · Bewegingsloos
+            </div>
+          </div>
+        </div>
+
+        <div class="section-label">Vitale gegevens</div>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-label">Hartslag</div>
+            <div class="stat-value green">44<span class="stat-unit">bpm</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Temperatuur</div>
+            <div class="stat-value">22.4<span class="stat-unit">°C</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Gewicht</div>
+            <div class="stat-value amber" style="font-size:18px;">±485<span class="stat-unit">kg</span></div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Activiteit</div>
+            <div class="stat-value" style="font-size:16px;margin-top:3px;">Rust</div>
+          </div>
+        </div>
+
+        <div class="section-label">Locatie</div>
+        <div class="info-group">
+          <div class="info-row">
+            <span class="info-key">Latitude</span>
+            <span class="info-val green">52.3312° N</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Longitude</span>
+            <span class="info-val green">6.6748° E</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Nauwkeurigheid</span>
+            <span class="info-val">±4 m (GPS)</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Regio</span>
+            <span class="info-val">Twente, NL</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Type locatie</span>
+            <span class="info-val amber">Schuur / gebouw</span>
+          </div>
+        </div>
+
+        <div class="section-label">Signaal</div>
+        <div class="info-group">
+          <div class="info-row">
+            <span class="info-key">Netwerk</span>
+            <span class="info-val">GSM-NL-03</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Signaalsterkte</span>
+            <span class="info-val green">3 / 4</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Ping interval</span>
+            <span class="info-val">5 min</span>
+          </div>
+          <div class="info-row">
+            <span class="info-key">Satellieten</span>
+            <span class="info-val">9 actief</span>
+          </div>
+        </div>
+
+        <div class="section-label">Batterij</div>
+        <div class="batt-section">
+          <div class="batt-header">
+            <span class="info-key">Lading</span>
+            <span class="info-val green">74%</span>
+          </div>
+          <div class="batt-bar"><div class="batt-fill"></div></div>
+          <div class="batt-sub">Geschat ~18 dagen resterend</div>
+        </div>
+
+        <div class="section-label">Meldingen</div>
+        <div class="alert-card">
+          <div class="alert-title">⚠ Melding</div>
+          <div class="alert-body">Dier al 6u 42m niet bewogen. Locatie: binnen gebouw (schuur). Geen noodalarm vereist.</div>
+        </div>
+
+        <div style="height:16px;"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="bottom-nav">
+    <button class="nav-btn active" id="nav-kaart" onclick="switchTab('kaart')">
+      <div class="nav-icon">🗺️</div>
+      <div class="nav-label">Kaart</div>
+    </button>
+    <button class="nav-btn" id="nav-detail" onclick="switchTab('detail')">
+      <div class="nav-icon">📡</div>
+      <div class="nav-label">Detail</div>
+    </button>
+    <button class="nav-btn disabled">
+      <div class="nav-icon">⚙️</div>
+      <div class="nav-label">Instellingen</div>
+    </button>
+  </div>
+
+</div>
+
+<script>
+  function switchTab(name) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    document.getElementById('nav-' + name).classList.add('active');
+    if (name === 'kaart') setTimeout(() => map.invalidateSize(), 50);
+  }
+
+  const camelLat = 52.3312;
+  const camelLon = 6.6748;
+
+  const map = L.map('map', {
+    center: [camelLat, camelLon],
+    zoom: 15,
+    zoomControl: true,
+    attributionControl: false,
+    tap: false
+  });
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
+
+  // Blauwe Apple-stijl dot
+  const markerHtml = `
+    <div style="position:relative;width:50px;height:50px;">
+      <div style="
+        position:absolute;top:50%;left:50%;
+        transform:translate(-50%,-50%);
+        width:16px;height:16px;
+        background:#147EFB;
+        border-radius:50%;
+        border:2.5px solid white;
+        box-shadow:0 2px 6px rgba(0,0,0,0.35);
+        z-index:2;
+      "></div>
+      <div class="rpl"></div>
+    </div>
+    <style>
+      .rpl {
+        position:absolute;top:50%;left:50%;
+        width:16px;height:16px;
+        background:rgba(20,126,251,0.25);
+        border-radius:50%;
+        animation:rpl 2.4s ease-out infinite;
+      }
+      @keyframes rpl {
+        0%   { width:16px;height:16px;opacity:1;margin-left:-8px;margin-top:-8px; }
+        100% { width:58px;height:58px;opacity:0;margin-left:-29px;margin-top:-29px; }
+      }
+    </style>`;
+
+  const icon = L.divIcon({ html: markerHtml, className: '', iconSize: [50,50], iconAnchor: [25,25] });
+  L.marker([camelLat, camelLon], { icon }).addTo(map);
+</script>
+</body>
+</html>
