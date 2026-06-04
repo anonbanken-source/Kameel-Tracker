@@ -1,7 +1,7 @@
 {
-  "name": "KameelTracker",
-  "short_name": "KameelTracker",
-  "start_url": "/KameelTracker/",
+  "name": "Kameel-Tracker",
+  "short_name": "Kameel-Tracker",
+  "start_url": "/Kameel-Tracker/",
   "display": "standalone",
   "background_color": "#c0392b",
   "theme_color": "#c0392b",
